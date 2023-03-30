@@ -1,0 +1,1043 @@
+
+
+```{r}
+
+library(tidyverse)
+library(rvest)
+library(janitor)
+library(leaflet)
+library(tigris)
+library(ggplot2)
+library(stringr)
+library(writexl)
+library(data.table)
+library(lubridate)
+
+
+fec_data_all_years <- read.csv("FEC_Data_All_Years.csv") %>% 
+  rename(date = contribution_receipt_date)
+
+salary_guide_2022 <- read.csv("salary_guide.csv") %>% 
+  clean_names() %>% 
+  filter(!str_detect(department, 'Shady Grove')) %>% 
+  rename(salary = appt_base_annual_salary)
+
+salary_guide_2021 <- read.csv("salaries_2021.csv") %>% 
+  clean_names() %>% 
+  filter(!str_detect(department, 'Shady Grove')) %>% 
+  rename(salary = appt_base_annual_salary)
+
+salary_guide_2020 <- read.csv("salary_data_2020.csv") %>% 
+  clean_names() %>% 
+  filter(!str_detect(department, 'Shady Grove'))
+
+salary_guide_2019 <- read.csv("salary_data_2019.csv") %>% 
+  clean_names() %>% 
+  filter(!str_detect(department, 'Shady Grove'))
+
+salary_guide_2018 <- read.csv("salary_data_2018.csv") %>% 
+  clean_names() %>% 
+  filter(!str_detect(department, 'Shady Grove'))
+
+salary_guide_2017 <- read.csv("salary_data_2017.csv") %>% 
+  clean_names() %>% 
+  filter(!str_detect(department, 'Shady Grove'))
+
+salary_guide_2016 <- read.csv("salary_data_2016.csv") %>% 
+  clean_names() %>% 
+  filter(!str_detect(department, 'Shady Grove'))
+
+salary_guide_2015 <- read.csv("salary_data_2015.csv") %>% 
+  clean_names() %>% 
+  filter(!str_detect(department, 'Shady Grove'))
+
+salary_guide_2014 <- read.csv("salary_data_2014.csv") %>% 
+  clean_names() %>% 
+  filter(!str_detect(department, 'Shady Grove'))
+
+salary_guide_2013 <- read.csv("salary_data_2013.csv") %>% 
+  clean_names() %>% 
+  filter(!str_detect(department, 'Shady Grove'))
+
+
+```
+
+State Data:
+
+```{r}
+
+
+#below, I imported datasets that had a filing year of 2013 - 2022, which is the frame of reference for this story. the data came from https://campaignfinance.maryland.gov/Public/ViewReceipts?theme=vista and I filtered to include individual donations for electoral races.
+
+state_2022 <- read.csv("state_2022.csv")
+state_2021 <- read.csv("state_2021.csv")
+state_2020 <- read.csv("state_2020.csv")
+state_2019 <- read.csv("state_2019.csv")
+state_2018 <- read.csv("state_2018.csv")
+state_2017 <- read.csv("state_2017.csv")
+state_2016 <- read.csv("state_2016.csv")
+state_2015 <- read.csv("state_2015.csv")
+state_2014 <- read.csv("state_2014.csv")
+state_2013 <- read.csv("state_2013.csv")
+
+
+#this combined the data into one dataset and filtered the data for people who work UMD
+state_2013_2022 <- rbind(state_2013, state_2014, state_2015, state_2016, state_2017, state_2018, state_2019, state_2020, state_2021, state_2022) %>%
+  clean_names() %>% 
+  filter(employer_name == "University of Maryland" | employer_name == "UMD" | employer_name == "University of MD" | employer_name == "Univ of Maryland"| employer_name == "Univ of MD" ) %>% 
+  mutate(date = contribution_date) %>% 
+  separate(contribution_date, sep="/", into = c("month", "day", "year")) %>% #this separated the date into three different columns
+  rename(committee_name = receiving_committee) %>% 
+  rename(contribution_receipt_amount = contribution_amount) #i renamed these columns so they would align with the FEC data
+
+#this will reformat the names of the employees for the state data so that I could join with the salary guides:
+
+state_2013_2022[c('last_name', 'first_name')] <- str_split_fixed(state_2013_2022$contributor_name, '  ', 2)
+
+state_2013_2022[c('first_name', 'extra_name')] <- str_split_fixed(state_2013_2022$first_name, ' ', 2)
+
+state_2013_2022$first_name <- tolower(state_2013_2022$first_name)
+
+state_2013_2022$last_name <- tolower(state_2013_2022$last_name)
+  
+
+#now that we have separated the date column into three years, I am now going to create individual datasets for each year from 2013 to 2022. Note that this is different than the above datasets because that was for the filing year, while this was the year when the contribution was made. for example, a contribution could have been made in 2012 for a 2014 election cycle. we are interested in time of contribution.
+  
+state_2022 <- state_2013_2022 %>% 
+  filter(year == 22)
+state_2021 <- state_2013_2022 %>% 
+  filter(year == 21)
+state_2020 <- state_2013_2022 %>% 
+  filter(year == 20)
+state_2019 <- state_2013_2022 %>% 
+  filter(year == 19)
+state_2018 <- state_2013_2022 %>% 
+  filter(year == 18)
+state_2017 <- state_2013_2022 %>% 
+  filter(year == 17)
+state_2016 <- state_2013_2022 %>% 
+  filter(year == 16)
+state_2015 <- state_2013_2022 %>% 
+  filter(year == 15)
+state_2014 <- state_2013_2022 %>% 
+  filter(year == 14)
+state_2013 <- state_2013_2022 %>% 
+  filter(year == 13)
+```
+
+The next three chunks of data are for coding the recipient of the political donartions to a particular political party. There are comments next to most candidates/commmittees with evidence of a party affiliation.
+
+
+Party Affiliation for FEC Data
+
+```{r}
+fec_data_all_years <- fec_data_all_years %>% 
+  mutate(party = case_when(
+        committee_name == "ACTBLUE" | 
+        committee_name == "DSCC" |
+        committee_name == "JUSTICE DEMOCRATS PAC" | 
+        committee_name == "DCCC" |
+        committee_name == "WARNOCK FOR GEORGIA" | 
+        committee_name == "CHERI BEASLEY FOR NORTH CAROLINA" |
+        committee_name == "DEMOCRATIC ACTION" | 
+        committee_name == "MARK KELLY FOR SENATE" |
+        committee_name == "CATHERINE CORTEZ MASTO FOR SENATE" |
+        committee_name == "CORTEZ MASTO VICTORY 2022" | 
+        committee_name == "DNC SERVICES CORP / DEMOCRATIC NATIONAL COMMITTEE" |
+        committee_name == "MANDELA BARNES FOR WISCONSIN" | 
+        committee_name == "BOOKER FOR KENTUCKY" |
+        committee_name == "VAN HOLLEN FOR SENATE" | 
+        committee_name == "VAN HOLLEN VICTORY FUND" |
+        committee_name == "FETTERMAN FOR PA" |
+        committee_name == "TIM RYAN FOR OHIO" | 
+        committee_name == "MOVEON.ORG POLITICAL ACTION" | #https://www.opensecrets.org/orgs/moveon-org/totals?id=D000022122
+        committee_name == "BOWMAN FOR CONGRESS" | 
+        committee_name == "SPANBERGER FOR CONGRESS" |
+        committee_name == "MAGGIE FOR NH" | 
+        committee_name == "CONGRESSIONAL BLACK CAUCUS PAC" | #https://www.opensecrets.org/orgs/congressional-black-caucus-pac/recipients?id=D000021932
+        committee_name == "LUCAS KUNCE FOR MISSOURI" | #https://lucaskunce.com
+        committee_name == "MONDAIRE FOR CONGRESS" |#Mondaire Jones, Dem
+        committee_name == "BRADY PAC" | #https://www.opensecrets.org/political-action-committees-pacs/brady-pac/C00674093/summary/2020
+        committee_name == "KATIE PORTER FOR CONGRESS" |
+        committee_name == "VAL DEMINGS FOR U.S. SENATE" | 
+        committee_name == "MEDICARE FOR ALL" |
+        committee_name == "NINA TURNER FOR US" |
+        committee_name == "NANCY PELOSI FOR CONGRESS" | 
+        committee_name == "JAMIE RASKIN FOR CONGRESS" |
+        committee_name == "BACKPAC" | #https://www.opensecrets.org/political-action-committees-pacs/backpac/C00566562/summary/2022
+        committee_name == "NATIONAL DEMOCRATIC TRAINING COMMITTEE PAC" |
+        committee_name == "JESSICA CISNEROS FOR CONGRESS" | 
+        committee_name == "CONGRESSIONAL PROGRESSIVE CAUCUS PAC" |
+        committee_name == "FRIENDS OF SCHUMER" | 
+        committee_name == "MORGAN HARPER FOR OHIO" | #https://morganharper.org
+        committee_name == "EMILY'S LIST" | #https://www.opensecrets.org/orgs/emily-s-list/totals?id=d000000113
+        committee_name == "ERICA FOR US" | #https://ballotpedia.org/Erica_Smith, website here is ericaforus, but it's down now
+        committee_name == "PROGRESSIVE CHANGE CAMPAIGN COMMITTEE" | 
+        committee_name == "FRIENDS OF BERNIE SANDERS" |
+        committee_name == "KUSTER FOR CONGRESS, INC" | #https://kuster.house.gov
+        committee_name == "DEREK MARSHALL FOR CONGRESS" | #https://www.derekmarshallca.com
+        committee_name == "AMERIPAC: THE FUND FOR A GREATER AMERICA" | #https://www.opensecrets.org/political-action-committees-pacs/ameripac-the-fund-for-a-greater-america/C00271338/summary/2022
+        committee_name == "DEMOCRATIC STATE CENTRAL COMMITTEE OF MARYLAND" |
+        committee_name == "HEATHER MIZEUR FOR CONGRESS" |  #https://heathermizeur.com
+        committee_name == "WARNOCK VICTORY FUND" |
+        committee_name == "REAL JUSTICE PAC" | #https://ballotpedia.org/Real_Justice_PAC
+        committee_name == "JON OSSOFF FOR SENATE" |
+        committee_name == "SWING LEFT" | 
+        committee_name == "DAVID SEGAL FOR CONGRESS" | #https://www.davidsegalri.com/endorsements
+        committee_name == "FRIENDS OF MELANIE DARRIGO" | #https://darrigo2022.com
+        committee_name == "JASMINE FOR US" | #https://www.facebook.com/jasminefor100/
+        committee_name == "MAXWELL ALEJANDRO FROST FOR CONGRESS" | 
+        committee_name == "CORI BUSH FOR CONGRESS" |
+        committee_name == "PROGRESSIVE TURNOUT PROJECT" |
+        committee_name == "CANNING FOR CONGRESS" | #https://www.canningforcongress.com
+        committee_name == "FOR THE MANY PAC" | #https://forthemany.org
+        committee_name == "GREG CASAR FOR CONGRESS" | #https://www.casarforcongress.com
+        committee_name == "REBECCA FOR WASHINGTON" | #https://ballotpedia.org/Rebecca_Parson
+        committee_name == "RUDY SALAS FOR CONGRESS" | #https://ballotpedia.org/Rudy_Salas
+        committee_name == "FAIR FIGHT" | #https://www.opensecrets.org/political-action-committees-pacs/fair-fight-pac/C00693515/summary/2022
+        committee_name == "PEACE ACTION PAC/ FKA SANE/FREEZE PAC" | #https://www.opensecrets.org/political-action-committees-pacs/peace-action/C00157941/summary/2020
+        committee_name == "DEMOCRATIC STRATEGY INSTITUTE" |
+        committee_name == "BILL FOSTER FOR CONGRESS" | #https://www.billfoster.com
+        committee_name == "DEFEAT BY TWEET" | #https://www.opensecrets.org/outside-spending/detail?cmte=C00749143&cycle=2022
+        committee_name == "CHC BOLD PAC" | #https://www.boldpac.com
+        committee_name == "314 ACTION FUND" | #https://www.opensecrets.org/political-action-committees-pacs/314-action-fund/C00633248/summary/2018
+        committee_name == "OPERATION 147" | #https://www.opensecrets.org/outside-spending/detail?cmte=C00768929&cycle=2022
+        committee_name == "AMY VILELA FOR CONGRESS" | #https://ballotpedia.org/Amy_Vilela
+        committee_name == "BRAND NEW CONGRESS" | #https://www.brandnewcongress.org
+        committee_name == "BRITTANY FOR THE PEOPLE" | #https://ballotpedia.org/Brittany_Ramos_DeBarros (WFP)
+        committee_name == "ERIC CURRY FOR SF" | #https://ballotpedia.org/Eric_Curry
+        committee_name == "JAMIE FOR OREGON" | #https://jamiefororegon.com/meet-jamie/
+        committee_name == "THE PAC FOR AMERICA'S FUTURE" | #https://www.influencewatch.org/political-party/future-now-fund-pac-for-americas-future/
+        committee_name == "MONTGOMERY COUNTY DEMOCRATIC CENTRAL COMMITTEE" | 
+        committee_name == "ALEXANDRA HUNT FOR CONGRESS" | #https://ballotpedia.org/Alexandra_Hunt
+        committee_name == "ASHMI FOR CONGRESS" | #https://ashmiforcongress.com
+        committee_name == "GLENN IVEY FOR CONGRESS 2022" |#https://ivey.house.gov
+        committee_name == "SMP" | #https://www.opensecrets.org/outside-spending/detail?cmte=C00484642&cycle=2022
+        committee_name == "EQUALITY PAC" | #https://lgbtequalitypac.org
+        committee_name == "SHAHID BUTTAR FOR CONGRESS COMMITTEE"  | #https://shahidforchange.us
+        committee_name == "SHAHEEN FOR SENATE" | #https://www.shaheen.senate.gov
+        committee_name == "FRIENDS OF JAZZ LEWIS" | #https://www.jazzlewis.com
+        committee_name == "VOTEVETS" | #https://www.opensecrets.org/orgs/votevets-org/totals?id=D000029722
+        committee_name == "YUH-LINE NIOU FOR NEW YORK" | #https://ballotpedia.org/Yuh-Line_Niou
+        committee_name == "BIDEN FOR PRESIDENT" | 
+        committee_name == "WEXTON FOR CONGRESS" | #https://wexton.house.gov| 
+        committee_name == "STOP REPUBLICANS" |
+        committee_name == "NELSON FOR WISCONSIN" | #https://ballotpedia.org/Tom_Nelson_(Wisconsin)
+        committee_name == "OAKLEY FOR CONGRESS" | #https://ballotpedia.org/Imani_Oakley
+        committee_name == "ELAINE FOR CONGRESS" | #https://elaineforcongress.com/
+        committee_name == "VAN HOLLEN DEMINGS VICTORY FUND" |
+        committee_name == "ELISSA SLOTKIN FOR CONGRESS" | #https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&ved=2ahUKEwiP182pi7n9AhXEGVkFHRs9A1MQFnoECBkQAQ&url=https%3A%2F%2Felissaforcongress.com%2F&usg=AOvVaw2KQcODQc2XuuGG_SAAEqbU
+        committee_name == "LIZ MATHIS FOR CONGRESS" | #https://lizmathis.com
+        committee_name == "WOMEN WIN WISCONSIN PAC" | #https://www.womenw.in
+        committee_name == "PAC TO THE FUTURE" | #https://www.opensecrets.org/political-action-committees-pacs/pac-to-the-future/C00344234/summary/2022
+        committee_name == "MELANIE FOR NEW MEXICO" | #https://stansbury.house.gov
+        committee_name == "MICHAEL FRANKEN FOR IOWA, INC" | #https://ballotpedia.org/Michael_Franken
+        committee_name == "GILLIBRAND FOR SENATE" | #https://www.gillibrand.senate.gov
+        committee_name == "INDIVISIBLE ACTION" | #https://www.opensecrets.org/political-action-committees-pacs/indivisible-action/C00678839/summary/2022
+        committee_name == "ALLY FOR CONGRESS" | #https://allyforcongress.com
+        committee_name == "ANDREA SALINAS FOR OREGON" | #https://www.andreasalinasfororegon.com
+        committee_name == "CINDY AXNE FOR CONGRESS" | #https://cindyaxneforcongress.com
+        committee_name == "FRIENDS OF DON BEYER" | #https://friendsofdonbeyer.com
+        committee_name == "GEOFF YOUNG FOR KENTUCKY" | #https://ballotpedia.org/Geoff_Young
+        committee_name == "GIFFORDS PAC" | #https://www.opensecrets.org/political-action-committees-pacs/giffords-pac/C00540443/summary/2022
+        committee_name == "KERMIT JONES FOR CONGRESS" | #https://ballotpedia.org/Kermit_Jones
+        committee_name == "TEXAS DEMOCRATIC PARTY" | 
+        committee_name == "THE PROGRESSIVE LIST" |
+        committee_name == "WINTER FOR MONTANA" | #https://ballotpedia.org/Tom_Winter
+        committee_name == "END CITIZENS UNITED" | #https://www.opensecrets.org/political-action-committees-pacs/end-citizens-united/C00573261/summary/2022
+        committee_name == "DEMOCRACY FOR AMERICA" | #https://www.opensecrets.org/political-action-committees-pacs/democracy-for-america/C00370007/summary/2022
+        committee_name == "DIRT ROAD PAC" | #https://www.opensecrets.org/political-action-committees-pacs/dirt-road-pac/C00763359/summary/2022
+        committee_name == "DEFEND THE VOTE" | #https://www.opensecrets.org/political-action-committees-pacs/defend-the-vote/C00764233/summary/2022
+        committee_name == "JSTREETPAC" | #https://www.opensecrets.org/political-action-committees-pacs/jstreetpac/C00441949/summary/2022
+        committee_name == "TEXANS FOR JOHN LIRA" | #https://ballotpedia.org/John_Lira_(Texas)
+        committee_name == "JOSH RILEY FOR CONGRESS" | #https://ballotpedia.org/Josh_Riley
+        committee_name == "AB PAC" |
+        committee_name == "DEMOCRATIC PARTY OF VIRGINIA" | 
+        committee_name == "JEFF JACKSON FOR CONGRESS" | #https://www.jeffjacksonnc.com
+        committee_name == "BRITTANY OLIVER FOR CONGRESS" | #https://ballotpedia.org/Brittany_Oliver_(Maryland)
+        committee_name == "CARAVEO FOR CONGRESS" | #https://caraveo.house.gov
+        committee_name == "DELGADO FOR CONGRESS" | #https://www.congress.gov/member/antonio-delgado/D000630
+        committee_name == "DEMOCRATIC VICTORY PAC, INC." |
+        committee_name == "ERIC LYNN FOR CONGRESS" | #https://ericlynnforcongress.com
+        committee_name == "GLENN HURST FOR IOWA" | #https://ballotpedia.org/Glenn_Hurst
+        committee_name == "HARDEN FOR CONGRESS" | #https://ballotpedia.org/Dave_Harden
+        committee_name == "HOLLY MCCORMACK FOR CONGRESS" | #https://ballotpedia.org/Holly_McCormack
+        committee_name == "JUNAID FOR CONGRESS" | #https://www.junaidforcongress.com
+        committee_name == "MAGAZINER FOR CONGRESS" | #https://ballotpedia.org/Seth_Magaziner
+        committee_name == "MIKIE SHERRILL FOR CONGRESS" | #https://www.mikiesherrill.com
+        committee_name == "MOLLY FOR VERMONT" | #https://ballotpedia.org/Molly_Gray
+        committee_name == "OMARI HARDY FOR CONGRESS" | #https://ballotpedia.org/Omari_Hardy
+        committee_name == "SCHOLTEN FOR CONGRESS" | #https://ballotpedia.org/Hillary_Scholten
+        committee_name == "TOM MALINOWSKI FOR CONGRESS" | #https://malinowskifornj.com
+        committee_name == "HOUSE MAJORITY PAC" | #https://www.opensecrets.org/political-action-committees-pacs/house-majority-pac/C00495028/summary/2020
+        committee_name == "FRIENDS OF SHERROD BROWN" | #ohio senator
+        committee_name == "PRAMILA FOR CONGRESS" | #jayapal, a dem
+        committee_name == "LET AMERICA VOTE PAC" | #https://www.opensecrets.org/political-action-committees-pacs/let-america-vote/C00632398/summary/2022
+        committee_name == "CHRIS DELUZIO FOR CONGRESS" | #https://ballotpedia.org/Christopher_Deluzio
+        committee_name == "GABE VASQUEZ FOR CONGRESS" | #https://ballotpedia.org/Gabriel_Vasquez
+        committee_name == "ANDY LEVIN FOR CONGRESS" | #https://ballotpedia.org/Andy_Levin
+        committee_name == "DEFEAT REPUBLICANS PAC" | 
+        committee_name == "EVERYDAY PEOPLE" | #https://www.opensecrets.org/outside-spending/detail?cmte=C00720029&cycle=2022
+        committee_name == "FRIENDS OF JESSICA MASON" | #https://ballotpedia.org/Jessica_Mason
+        committee_name == "REBEKAH JONES CAMPAIGN" | #https://ballotpedia.org/Rebekah_Jones
+        committee_name == "WFP IE COMMITTEE" | #https://www.opensecrets.org/outside-spending/detail?cmte=C00626861&cycle=2020
+        committee_name == "DR. ASIF MAHMOOD FOR CONGRESS" | #https://ballotpedia.org/Asif_Mahmood
+        committee_name == "CHUY GARCIA FOR CONGRESS" | #https://ballotpedia.org/Jesus_Garcia
+        committee_name == "DR. ASIF MAHMOOD VICTORY FUND" | #https://ballotpedia.org/Asif_Mahmood
+        committee_name == "LAUREN UNDERWOOD FOR CONGRESS" | #https://ballotpedia.org/Lauren_Underwood
+        committee_name == "ANDY KIM FOR CONGRESS" | #https://ballotpedia.org/Andrew_Kim_(New_Jersey)
+        committee_name == "COLIN ALLRED FOR CONGRESS" | #https://ballotpedia.org/Colin_Allred
+        committee_name == "COMMITTEE TO ELECT ALAN GRAYSON" | #https://ballotpedia.org/Alan_Grayson
+        committee_name == "DEMOCRATIC PARTY OF WISCONSIN FEDERAL" | 
+        committee_name == "RETIRED AMERICANS PAC" | #https://www.opensecrets.org/outside-spending/detail/2022?cmte=C00483883&tab=summary
+        committee_name == "DEMOCRATS UNITED" |
+        committee_name == "DMA PAC" | #https://www.opensecrets.org/political-action-committees-pacs/democratic-majority-action/C00762666/summary/2022
+        committee_name == "ELECT JASON CALL FOR CONGRESS" | #https://ballotpedia.org/Jason_Call_(Washington)
+        committee_name == "KARA HAHN FOR CONGRESS" | #https://ballotpedia.org/Kara_Hahn
+        committee_name == "MARY PELTOLA FOR ALASKA" | #https://ballotpedia.org/Mary_Peltola
+        committee_name == "MUAD FOR CONGRESS" | #https://ballotpedia.org/Muad_Hrezi
+        committee_name == "PATRICK SCHMIDT FOR KANSAS" | #https://ballotpedia.org/Patrick_Schmidt
+        committee_name == "PEOPLE OF THE 9TH FOR STEPHANIE" | #https://ballotpedia.org/Stephanie_Gallardo
+        committee_name == "STAND UP FOR WORKERS PAC" | #https://www.opensecrets.org/political-action-committees-pacs/stand-up-for-workers-pac/C00724781/summary/2020
+        committee_name == "TAMMY FOR ILLINOIS" | #https://tammyduckworth.com
+        committee_name == "TEAM CHENEY" | #https://www.opensecrets.org/jfc/summary.php?id=C00698738&cycle=2020
+        committee_name == "BRUNO FOR CONGRESS" | #https://ballotpedia.org/Bruno_Amato
+        committee_name == "EDW HOLD THE HOUSE FUND" | #https://www.opensecrets.org/jfc/summary.php?id=C00789578&cycle=2022
+        committee_name == "EVERYDISTRICT" | #https://www.opensecrets.org/political-action-committees-pacs/everydistrict/C00659870/pac-to-pac/2022
+        committee_name == "DITCH FUND" | #https://www.factcheck.org/2020/04/ditch-fund/
+        committee_name == "MCKAYLA 2022" | #https://ballotpedia.org/Mckayla_Wilkes
+        committee_name == "VPP" | #https://www.opensecrets.org/political-action-committees-pacs/voter-protection-project/C00692319/summary/2022
+        committee_name == "MARCUS FOR GEORGIA" | #https://marcusforgeorgia.com
+        committee_name == "BLUEWAVEAMERICA" | 
+        committee_name == "FRIENDS OF JOHN SARBANES" | #https://ballotpedia.org/John_Sarbanes
+        committee_name == "NO EXCUSES PAC" | #https://www.noexcusespac.com
+        committee_name == "REALLY AMERICAN PAC" | #https://www.opensecrets.org/outside-spending/detail/2022?cmte=C00748582&tab=summary
+        committee_name == "BENNET FOR COLORADO" | #https://ballotpedia.org/Michael_Bennet
+        committee_name == "ALEXANDRIA OCASIO-CORTEZ FOR CONGRESS" |
+        committee_name == "DICKINSON FOR CONGRESS COMMITTEE" | #https://docquery.fec.gov/cgi-bin/forms/C00701847/1323327/
+        committee_name == "CORY BOOKER FOR SENATE" | 
+        committee_name == "ELECT DIVERSE DEMOCRATS PAC" |
+        committee_name == "MALCOLM PAC" |  #this was for PA Dem Malcolm Kenyatta, the treasurer listed on this form (Matthew Daggett) works for Kenyatta
+        committee_name == "ELECT DEMOCRATIC WOMEN" | 
+        committee_name == "SHARICE FOR CONGRESS" | #https://ballotpedia.org/Sharice_Davids
+        committee_name == "WARREN DEMOCRATS, INC." |
+        committee_name == "BRIGHTER FUTURE PAC" |  #I couldn’t find anything about this one, but the donor (Norbert Hornstein) has donated to only Democrats in the past
+        committee_name == "WARREN DEMOCRATS, INC." | 
+        committee_name == "PLANNED PARENTHOOD VOTES" |
+        committee_name == "DEMOCRACY ENGINE, INC., PAC" | #https://www.opensecrets.org/orgs/democracy-engine/recipients?id=D000025328
+        committee_name == "WHITEHOUSE FOR SENATE" | #https://ballotpedia.org/Sheldon_Whitehouse
+        committee_name == "EDF ACTION VOTES" ~ "DEM",   #https://www.opensecrets.org/outside-spending/detail?cmte=C00707844&cycle=2022
+
+        committee_name == "THE GREAT TASK" | #https://www.opensecrets.org/jfc/summary.php?id=C00785378&cycle=2022
+        committee_name == "WINRED" | 
+        committee_name == "YURIPZY MORGAN FOR CONGRESS" | #https://ballotpedia.org/Yuripzy_Morgan 
+        committee_name == "MISSOURI VOICES ACTION FUND" | #https://www.opensecrets.org/outside-spending/detail/2022?cmte=C00789362&tab=summary
+        committee_name == "ANDY HARRIS FOR CONGRESS" | #https://harris.house.gov
+        committee_name == "CRYSTAL VANUCH FOR CONGRESS" | #https://ballotpedia.org/Crystal_Vanuch
+        committee_name == "REPUBLICAN PARTY OF FLORIDA" |
+        committee_name == "REPUBLICAN NATIONAL COMMITTEE" |
+        committee_name == "TRUMP MAKE AMERICA GREAT AGAIN COMMITTEE" | 
+        committee_name == "NATIONAL RIFLE ASSOCIATION OF AMERICA POLITICAL VICTORY FUND" | 
+        committee_name == "TRUMP SAVE AMERICA JOINT FUNDRAISING COMMITTEE" | 
+        committee_name == "MAKE AMERICA GREAT AGAIN PAC" | 
+        committee_name == "SAVE AMERICA" | #https://www.opensecrets.org/political-action-committees-pacs/save-america/C00762591/summary/2022
+        committee_name == "MARCO RUBIO FOR SENATE" |
+        committee_name == "REPUBLICAN PARTY OF ARIZONA, LLC" | 
+        committee_name == "TEAM HERSCHEL, INC" ~ "REP", 
+
+       committee_name == "AMERICAN SOCIETY OF ANESTHESIOLOGISTS POLITICAL ACTION COMMITTEE (ASA PAC)" | #https://www.opensecrets.org/political-action-committees-pacs/american-society-of-anesthesiologists/C00255752/summary/2020
+       committee_name == "GREAT TASK PAC" | #https://greattask.com/about/
+       committee_name == "AMERICAN ETHIOPIAN PUBLIC AFFAIRS COMMITTEE" | #https://aepact.org
+committee_name == "AMERICAN SOCIETY FOR RADIATION ONCOLOGY PAC (''ASTRO-PAC'')" | #https://www.opensecrets.org/political-action-committees-pacs/american-society-for-radiation-oncology/C00384602/summary/2020
+        committee_name == "AMERICAN ASSOCIATION OF NURSE ANESTHETISTS SEPARATE SEGREGATED FUND (CRNA-PAC)" | #https://www.opensecrets.org/political-action-committees-pacs/american-assn-of-nurse-anesthetists/C00173153/summary/2020
+        committee_name == "AMERICAN PHARMACISTS ASSOCIATION POLITICAL ACTION COMMITTEE" | #https://www.opensecrets.org/political-action-committees-pacs/american-pharmacists-assn/C00193854/summary/2022
+        committee_name == "AMERICAN COLLEGE OF OB-GYNS PAC (OB-GYN PAC)" | #https://www.opensecrets.org/political-action-committees-pacs/american-congress-of-obstetricians-gynecologists/C00364158/summary/2018
+        committee_name == "THE LINCOLN PROJECT" ~ "OTHER")) #they're anti-trump, but not really fully democratic 
+
+
+
+```
+
+
+State Data by Party, 2021 Donors
+
+
+```{r}
+
+
+state_2021 <- state_2021 %>% 
+  mutate(party = case_when(
+      committee_name == "Lierman  Brooke for Maryland" | #https://msa.maryland.gov/msa/mdmanual/06hse/former/html/msa17084.html
+      committee_name == "Howard Progressive Project PAC" | #progressive = DEM
+      committee_name == "Franchot  Peter Friends Of" |  #https://msa.maryland.gov/msa/mdmanual/08conoff/comptroller/former/html/msa12223.html
+      committee_name == "Andrews  Vincent Friends of" | #https://www.baltimoresun.com/politics/elections/voter-guide/bs-2022-candidate-md-delegate-andrewsvin-20220518-4cgqncdqxjbjfmfoqkd3w4f4cu-story.html
+      committee_name == "Baker  Rushern III Friends Of-Comm For Pol Change (CPC)" | #https://msa.maryland.gov/msa/mdmanual/36loc/pg/former/html/msa12180.html
+      committee_name == "Jain  Ashwani Friends of" | #https://ballotpedia.org/Ashwani_Jain
+      committee_name == "Rosapepe  Jim Friends Of" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa12300.html
+      committee_name == "Blegay  Wala Friends for" | #https://msa.maryland.gov/msa/mdmanual/36loc/pg/leg/html/msa18477.html
+      committee_name == "Jackson  Michael A.  Friends of" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa14132.html
+      committee_name == "Jones  Adrienne Citizens For" | #https://msa.maryland.gov/msa/mdmanual/06hse/html/msa02630.html
+      committee_name == "Perez  Tom for Maryland" | #dem candidate for gov
+      committee_name == "Progressive Maryland New Era PAC" | #progressive = DEM
+      committee_name == "Wilkins  Jheanelle Friends of" | #https://msa.maryland.gov/msa/mdmanual/06hse/html/msa17361.html
+      committee_name == "Barnes  Ben Friends Of" | #https://msa.maryland.gov/msa/mdmanual/06hse/html/msa14613.html
+      committee_name == "Boyce  Regina T. Friends of" | #https://msa.maryland.gov/msa/mdmanual/06hse/html/msa18041.html
+      committee_name == "Dongarra  Paul Stand With" | #https://www.baltimoresun.com/politics/elections/voter-guide/bs-2022-candidate-baltco-council-dongarrapau-20220517-nxcdfh5lrzay7j5i5gbl26dfte-story.html
+      committee_name == "Fitzwater  Jessica Friends of" | #https://www.jessicafitzwater.com
+      committee_name == "Friedson  Andrew Friends of" | #https://ballotpedia.org/Andrew_Friedson_(Montgomery_County_Council,_District_1,_Maryland,_candidate_2022)
+      committee_name == "King  Nancy Friends of" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa14005.html
+      committee_name == "Leonard  Robbie Friends of" | #https://www.baltimoresun.com/politics/elections/voter-guide/bs-2022-candidate-baltco-statesatty-leonardrob-20220517-54k5s66reneh3mbrn5xzgc5tui-story.html
+      committee_name == "Patoka  Izzy Friends of" | #https://www.izzypatoka.com
+      committee_name == "Porter  Phylicia Friends for" | #https://msa.maryland.gov/msa/mdmanual/36loc/bcity/leg/html/msa18281.html
+      committee_name == "Qi  Lily Friends of" | #https://msa.maryland.gov/msa/mdmanual/06hse/html/msa18017.html
+      committee_name == "Shulman  Kathryn Friends of" | #https://www.kathyshulman.com (progresive policies)
+      committee_name == "Waldstreicher  Jeff Friends Of" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa14637.html
+      committee_name == "Alsobrooks  Angela Friends Of" | 
+      committee_name == "Baltimore County Democratic Central Committee" | 
+      committee_name == "Cook  Chuck (Charles) for Anne Arundel County" | #https://www.d33dems.org/board
+      committee_name == "Elfreth  Sarah Friends of" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa18047.html
+      committee_name == "Ferguson  Bill Citizens for" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa15347.html
+      committee_name == "Fisher  Wanika Friends of" | #https://msa.maryland.gov/msa/mdmanual/36loc/pg/leg/html/msa18043.html
+      committee_name == "Guyton  Michele for Baltimore County" | #https://msa.maryland.gov/msa/mdmanual/06hse/html/msa18039.html
+      committee_name == "Guzzone  Guy Friends Of" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa14619.html
+      committee_name == "Harris  Kevin M. Friends of" | #https://msa.maryland.gov/msa/mdmanual/06hse/html/msa18396.html
+      committee_name == "Harris  Marcus Citizens for" | #https://msa.maryland.gov/msa/mdmanual/36loc/how/jud/sheriffs/html/msa17950.html
+      committee_name == "Hayes  Antonio Citizens for" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa17079.html
+      committee_name == "Hucker  Tom Friends of" | #https://msa.maryland.gov/msa/mdmanual/36loc/mo/leg/former/html/msa14620.html
+      committee_name == "Kelly  Ariana Friends of" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa15450.html
+      committee_name == "Korman  Marc Friends of" | #https://msa.maryland.gov/msa/mdmanual/06hse/html/msa17060.html
+      committee_name == "Lee  Susan C. Friends Of" | #https://msa.maryland.gov/msa/mdmanual/08conoff/sos//html/msa13794.html
+      committee_name == "Livingston  Shawn People for" | #https://www.baltimoresun.com/politics/elections/voter-guide/bs-2022-candidate-arundel-council-livingstonsha-20220517-rqqa2gfgwfhybp4mdqqtqqhro4-story.html
+      committee_name == "McCray  Cory Friends of" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa17083.html
+      committee_name == "Moore  Wes For Maryland" | 
+       committee_name == "Nevo  Raymond A. Friends of" |  #https://ballotpedia.org/Raymond_Nevo_(Prince_George%27s_County_Council,_District_2,_Maryland,_candidate_2022)
+      committee_name == "Opportunity Maryland PAC" | #https://www.marylandmatters.org/2021/07/17/independent-expenditure-group-forms-to-support-wes-moore-for-governor/
+      committee_name == "Pinsky  Paul Citizens For" |  #https://msa.maryland.gov/msa/mdmanual/05sen/former/html/msa12156.html
+      committee_name == "Rodvien  Lisa Friends of" | #https://msa.maryland.gov/msa/mdmanual/36loc/an/leg/html/msa17932.html
+      committee_name == "Sesker  Everett Citizens For" | #https://msa.maryland.gov/msa/mdmanual/36loc/an/jud/sheriffs/html/msa18416.html
+      committee_name == "Stevenson  Chris Friends of" | #https://www.baltimoresun.com/politics/elections/voter-guide/bs-2022-candidate-md-delegate-stevensonchr-20220518-tqjmiqoye5e4xfdhymby2ynafe-story.html
+      committee_name == "Team 21 Slate" | #https://www.maniscanning.com/event/team-21-slate/ Dems listed on this event
+      committee_name == "Tichy  Christa Friends for" | #https://www.christatichyforcouncil.com
+      committee_name == "Zucker  Craig Friends Of" ~ "DEM", #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa15448.html
+        
+    
+         committee_name == "Citizens for a Strong and Safe Howard County in Opposition of CB 63-2020" | #https://repealsanctuarycounty.com, vote against sanctuary county, republican position
+        committee_name == "McMillan  Herb Friends Of" | #https://msa.maryland.gov/msa/mdmanual/06hse/former/html/msa13997.html
+        committee_name == "Schulz  Kelly For Governor" ~ "REP"))
+
+
+```
+
+State Data by Party, 2022 Donors:
+
+```{r}
+
+
+state_2022 <- state_2022 %>% 
+      mutate(party = case_when(
+      committee_name == "Lierman  Brooke for Maryland" | #https://msa.maryland.gov/msa/mdmanual/06hse/former/html/msa17084.html
+      committee_name == "Howard Progressive Project PAC" | #progressive = DEM
+      committee_name == "Franchot  Peter Friends Of" |  #https://msa.maryland.gov/msa/mdmanual/08conoff/comptroller/former/html/msa12223.html
+      committee_name == "Andrews  Vincent Friends of" | #https://www.baltimoresun.com/politics/elections/voter-guide/bs-2022-candidate-md-delegate-andrewsvin-20220518-4cgqncdqxjbjfmfoqkd3w4f4cu-story.html
+      committee_name == "Baker  Rushern III Friends Of-Comm For Pol Change (CPC)" | #https://msa.maryland.gov/msa/mdmanual/36loc/pg/former/html/msa12180.html
+      committee_name == "Jain  Ashwani Friends of" | #https://ballotpedia.org/Ashwani_Jain
+      committee_name == "Rosapepe  Jim Friends Of" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa12300.html
+      committee_name == "Blegay  Wala Friends for" | #https://msa.maryland.gov/msa/mdmanual/36loc/pg/leg/html/msa18477.html
+      committee_name == "Jackson  Michael A.  Friends of" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa14132.html
+      committee_name == "Jones  Adrienne Citizens For" | #https://msa.maryland.gov/msa/mdmanual/06hse/html/msa02630.html
+      committee_name == "Perez  Tom for Maryland" | #dem candidate for gov
+      committee_name == "Progressive Maryland New Era PAC" | #progressive = DEM
+      committee_name == "Wilkins  Jheanelle Friends of" | #https://msa.maryland.gov/msa/mdmanual/06hse/html/msa17361.html
+      committee_name == "Barnes  Ben Friends Of" | #https://msa.maryland.gov/msa/mdmanual/06hse/html/msa14613.html
+      committee_name == "Boyce  Regina T. Friends of" | #https://msa.maryland.gov/msa/mdmanual/06hse/html/msa18041.html
+      committee_name == "Dongarra  Paul Stand With" | #https://www.baltimoresun.com/politics/elections/voter-guide/bs-2022-candidate-baltco-council-dongarrapau-20220517-nxcdfh5lrzay7j5i5gbl26dfte-story.html
+      committee_name == "Fitzwater  Jessica Friends of" | #https://www.jessicafitzwater.com
+      committee_name == "Friedson  Andrew Friends of" | #https://ballotpedia.org/Andrew_Friedson_(Montgomery_County_Council,_District_1,_Maryland,_candidate_2022)
+      committee_name == "King  Nancy Friends of" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa14005.html
+      committee_name == "Leonard  Robbie Friends of" | #https://www.baltimoresun.com/politics/elections/voter-guide/bs-2022-candidate-baltco-statesatty-leonardrob-20220517-54k5s66reneh3mbrn5xzgc5tui-story.html
+      committee_name == "Patoka  Izzy Friends of" | #https://www.izzypatoka.com
+      committee_name == "Porter  Phylicia Friends for" | #https://msa.maryland.gov/msa/mdmanual/36loc/bcity/leg/html/msa18281.html
+      committee_name == "Qi  Lily Friends of" | #https://msa.maryland.gov/msa/mdmanual/06hse/html/msa18017.html
+      committee_name == "Shulman  Kathryn Friends of" | #https://www.kathyshulman.com (progresive policies)
+      committee_name == "Waldstreicher  Jeff Friends Of" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa14637.html
+      committee_name == "Alsobrooks  Angela Friends Of" | 
+      committee_name == "Baltimore County Democratic Central Committee" | 
+      committee_name == "Cook  Chuck (Charles) for Anne Arundel County" | #https://www.d33dems.org/board
+      committee_name == "Elfreth  Sarah Friends of" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa18047.html
+      committee_name == "Ferguson  Bill Citizens for" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa15347.html
+      committee_name == "Fisher  Wanika Friends of" | #https://msa.maryland.gov/msa/mdmanual/36loc/pg/leg/html/msa18043.html
+      committee_name == "Guyton  Michele for Baltimore County" | #https://msa.maryland.gov/msa/mdmanual/06hse/html/msa18039.html
+      committee_name == "Guzzone  Guy Friends Of" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa14619.html
+      committee_name == "Harris  Kevin M. Friends of" | #https://msa.maryland.gov/msa/mdmanual/06hse/html/msa18396.html
+      committee_name == "Harris  Marcus Citizens for" | #https://msa.maryland.gov/msa/mdmanual/36loc/how/jud/sheriffs/html/msa17950.html
+      committee_name == "Hayes  Antonio Citizens for" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa17079.html
+      committee_name == "Hucker  Tom Friends of" | #https://msa.maryland.gov/msa/mdmanual/36loc/mo/leg/former/html/msa14620.html
+      committee_name == "Kelly  Ariana Friends of" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa15450.html
+      committee_name == "Korman  Marc Friends of" | #https://msa.maryland.gov/msa/mdmanual/06hse/html/msa17060.html
+      committee_name == "Lee  Susan C. Friends Of" | #https://msa.maryland.gov/msa/mdmanual/08conoff/sos//html/msa13794.html
+      committee_name == "Livingston  Shawn People for" | #https://www.baltimoresun.com/politics/elections/voter-guide/bs-2022-candidate-arundel-council-livingstonsha-20220517-rqqa2gfgwfhybp4mdqqtqqhro4-story.html
+      committee_name == "McCray  Cory Friends of" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa17083.html
+      committee_name == "Moore  Wes For Maryland" | 
+       committee_name == "Nevo  Raymond A. Friends of" |  #https://ballotpedia.org/Raymond_Nevo_(Prince_George%27s_County_Council,_District_2,_Maryland,_candidate_2022)
+      committee_name == "Opportunity Maryland PAC" | #https://www.marylandmatters.org/2021/07/17/independent-expenditure-group-forms-to-support-wes-moore-for-governor/
+      committee_name == "Pinsky  Paul Citizens For" |  #https://msa.maryland.gov/msa/mdmanual/05sen/former/html/msa12156.html
+      committee_name == "Rodvien  Lisa Friends of" | #https://msa.maryland.gov/msa/mdmanual/36loc/an/leg/html/msa17932.html
+      committee_name == "Sesker  Everett Citizens For" | #https://msa.maryland.gov/msa/mdmanual/36loc/an/jud/sheriffs/html/msa18416.html
+      committee_name == "Stevenson  Chris Friends of" | #https://www.baltimoresun.com/politics/elections/voter-guide/bs-2022-candidate-md-delegate-stevensonchr-20220518-tqjmiqoye5e4xfdhymby2ynafe-story.html
+      committee_name == "Team 21 Slate" | #https://www.maniscanning.com/event/team-21-slate/ Dems listed on this event
+      committee_name == "Tichy  Christa Friends for" | #https://www.christatichyforcouncil.com
+      committee_name == "Walker  Monique A. Friends of" | #https://msa.maryland.gov/msa/mdmanual/36loc/pg/leg/former/html/msa17978.html
+      committee_name == "Gregory  Michele Friends of" | #https://ballotpedia.org/Michele_Gregory
+      committee_name == "Evelyn  Janssen E. Friends of" | #https://janssenevelyn.com
+      committee_name == "Niburg  Becca (Rebecca) Friends of" | #https://www.baltimoresun.com/politics/elections/voter-guide/bs-2022-candidate-md-delegate-niburgbec-20220518-lqftdb7ebza5pltgnwkzvtjlqm-story.html
+      committee_name == "Wright  Nakia Friends of" | #https://ballotpedia.org/Nakia_R._Wright_(Prince_George%27s_County_Council,_District_6,_Maryland,_candidate_2022)
+      committee_name == "Gile  Dawn Committee to Elect" | #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa18497.html
+      committee_name == "Paschall  Patrick Friends of" | #https://patrickpaschall.com
+      committee_name == "King  John for Governor" | #https://www.wypr.org/show/midday/2022-05-06/john-b-king-democratic-primary-candidate-for-maryland-governor
+      committee_name == "Pittman  Steuart Friends of" | #https://msa.maryland.gov/msa/mdmanual/36loc/an/html/msa17927.html
+      committee_name == "Socol  Max Neighbors for" | #https://ballotpedia.org/Max_Socol
+      committee_name == "House Democratic Caucus Committee  Maryland" |
+      committee_name == "Solomon  Jared Friends of" |#https://msa.maryland.gov/msa/mdmanual/06hse/html/msa18021.html
+      committee_name == "Esteve  Michael Citizens For" | #https://ballotpedia.org/Michael_Estève_(Prince_George%27s_County_Council,_District_4,_Maryland,_candidate_2022)
+      committee_name == "House Democratic Caucus Committee  Maryland" |
+      committee_name == "Gansler  Doug Friends Of" | #https://msa.maryland.gov/msa/mdmanual/08conoff/attorney/former/html/msa14107.html
+      committee_name == "Pompi  Jenni People for" |#https://www.jennipompi.com/testimonials, endorsements from dems
+      committee_name == "Miller  Aruna Friends of" |#https://msa.maryland.gov/msa/mdmanual/08conoff/ltgov/html/msa15449.html
+      committee_name == "Prince George's County Democratic Central Committee" | 
+      committee_name == "Smith  Tom Friends of" | #https://tomsmithformaryland.com
+      committee_name == "Kindra  Samay Singh Friends of" | #https://www.samaykindra.org/endorsements endorsements from dems
+      committee_name == "Zucker  Craig Friends Of" ~ "DEM", #https://msa.maryland.gov/msa/mdmanual/05sen/html/msa15448.html
+        
+    
+         committee_name == "Citizens for a Strong and Safe Howard County in Opposition of CB 63-2020" | #https://repealsanctuarycounty.com, vote against sanctuary county, republican position
+        committee_name == "McMillan  Herb Friends Of" | #https://msa.maryland.gov/msa/mdmanual/06hse/former/html/msa13997.html
+        committee_name == "Schulz  Kelly For Governor" ~ "REP"))
+
+
+
+```
+
+Reformatting Data for Joining
+
+
+```{r}
+
+#this reformatted the names of the employees for the FEC data so that I could join with the salary guides
+
+fec_data_all_years[c('last_name', 'first_name', 'extra_name')] <- str_split_fixed(fec_data_all_years$contributor_name, ' ', 3)
+
+fec_data_all_years$first_name <- tolower(fec_data_all_years$first_name)
+
+fec_data_all_years$last_name <- tolower(fec_data_all_years$last_name)
+
+fec_data_all_years <- fec_data_all_years %>% 
+  mutate(last_name = str_replace(last_name, ",", ""))
+
+
+#this reformatted the names of the employees for the salary guides so that I could join with the salary guides. it goes in chronological order by each salary year
+
+#2013 cleaning:
+
+salary_guide_2013[c('last_name', 'first_name', 'extra_name')] <- str_split_fixed(salary_guide_2013$employee, ' ', 3)
+
+salary_guide_2013$first_name <- tolower(salary_guide_2013$first_name)
+
+salary_guide_2013$last_name <- tolower(salary_guide_2013$last_name)
+
+salary_guide_2013 <- salary_guide_2013 %>% 
+  mutate(last_name = str_replace(last_name, ",", ""))
+
+#2014 cleaning:
+
+salary_guide_2014[c('last_name', 'first_name', 'extra_name')] <- str_split_fixed(salary_guide_2014$employee, ' ', 3)
+
+salary_guide_2014$first_name <- tolower(salary_guide_2014$first_name)
+
+salary_guide_2014$last_name <- tolower(salary_guide_2014$last_name)
+
+salary_guide_2014 <- salary_guide_2014 %>% 
+  mutate(last_name = str_replace(last_name, ",", ""))
+
+#2015 cleaning:
+
+salary_guide_2015[c('last_name', 'first_name', 'extra_name')] <- str_split_fixed(salary_guide_2015$employee, ' ', 3)
+
+salary_guide_2015$first_name <- tolower(salary_guide_2015$first_name)
+
+salary_guide_2015$last_name <- tolower(salary_guide_2015$last_name)
+
+salary_guide_2015 <- salary_guide_2015 %>% 
+  mutate(last_name = str_replace(last_name, ",", ""))
+
+#2016 cleaning:
+
+salary_guide_2016[c('last_name', 'first_name', 'extra_name')] <- str_split_fixed(salary_guide_2016$employee, ' ', 3)
+
+salary_guide_2016$first_name <- tolower(salary_guide_2016$first_name)
+
+salary_guide_2016$last_name <- tolower(salary_guide_2016$last_name)
+
+salary_guide_2016 <- salary_guide_2016 %>% 
+  mutate(last_name = str_replace(last_name, ",", ""))
+
+#2017 cleaning:
+
+
+salary_guide_2017[c('last_name', 'first_name', 'extra_name')] <- str_split_fixed(salary_guide_2017$employee, ' ', 3)
+
+salary_guide_2017$first_name <- tolower(salary_guide_2017$first_name)
+
+salary_guide_2017$last_name <- tolower(salary_guide_2017$last_name)
+
+salary_guide_2017 <- salary_guide_2017 %>% 
+  mutate(last_name = str_replace(last_name, ",", ""))
+
+#2018 cleaning:
+
+
+salary_guide_2018[c('last_name', 'first_name', 'extra_name')] <- str_split_fixed(salary_guide_2018$employee, ' ', 3)
+
+salary_guide_2018$first_name <- tolower(salary_guide_2018$first_name)
+
+salary_guide_2018$last_name <- tolower(salary_guide_2018$last_name)
+
+salary_guide_2018 <- salary_guide_2018 %>% 
+  mutate(last_name = str_replace(last_name, ",", ""))
+
+#2019 cleaning:
+
+salary_guide_2019[c('last_name', 'first_name', 'extra_name')] <- str_split_fixed(salary_guide_2019$employee, ' ', 3)
+
+salary_guide_2019$first_name <- tolower(salary_guide_2019$first_name)
+
+salary_guide_2019$last_name <- tolower(salary_guide_2019$last_name)
+
+salary_guide_2019 <- salary_guide_2019 %>% 
+  mutate(last_name = str_replace(last_name, ",", ""))
+
+#2020 cleaning:
+
+salary_guide_2020[c('last_name', 'first_name', 'extra_name')] <- str_split_fixed(salary_guide_2020$employee, ' ', 3)
+
+salary_guide_2020$first_name <- tolower(salary_guide_2020$first_name)
+
+salary_guide_2020$last_name <- tolower(salary_guide_2020$last_name)
+
+salary_guide_2020 <- salary_guide_2020 %>% 
+  mutate(last_name = str_replace(last_name, ",", ""))
+
+
+#2021 cleaning:
+
+salary_guide_2021[c('last_name', 'first_name', 'extra_name')] <- str_split_fixed(salary_guide_2021$primary_name, ' ', 3)
+
+salary_guide_2021$first_name <- tolower(salary_guide_2021$first_name)
+
+salary_guide_2021$last_name <- tolower(salary_guide_2021$last_name)
+
+salary_guide_2021 <- salary_guide_2021 %>% 
+  mutate(last_name = str_replace(last_name, ",", ""))
+
+#2022 cleaning:
+
+
+salary_guide_2022[c('last_name', 'first_name', 'extra_name')] <- str_split_fixed(salary_guide_2022$primary_name, ' ', 3)
+
+salary_guide_2022$first_name <- tolower(salary_guide_2022$first_name)
+
+salary_guide_2022$last_name <- tolower(salary_guide_2022$last_name)
+
+salary_guide_2022 <- salary_guide_2022 %>% 
+  mutate(last_name = str_replace(last_name, ",", ""))
+
+
+```
+
+Joining Data, 2021-2022
+
+```{r}
+
+#combining 2021 FEC data with 2021 salary guide:
+
+combined_salary_fec_2021 <- fec_data_all_years %>% 
+  inner_join(salary_guide_2021, by = c("first_name", "last_name")) %>% 
+  filter(report_year == 2021) %>% 
+  select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date, party)
+
+
+#combining 2021 state data with 2021 salary guide:
+
+combined_salary_state_2021 <- state_2021 %>% 
+  inner_join(salary_guide_2021, by = c("first_name", "last_name")) %>% 
+  select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date, party)
+
+#combining 2022 FEC data with 2022 salary guide:
+
+
+combined_salary_fec_2022 <- fec_data_all_years %>% 
+  inner_join(salary_guide_2022, by = c("first_name", "last_name")) %>% 
+  filter(report_year == 2022) %>% 
+  select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date, party)
+
+#combining 2022 state data with 2022 salary guide:
+
+
+combined_salary_state_2022 <- state_2022 %>% 
+  inner_join(salary_guide_2022, by = c("first_name", "last_name")) %>% 
+  select(first_name, last_name, contribution_receipt_amount, committee_name, department, division, salary, date, party)
+
+
+#combining the four of the above datasets into one to show ALL donations (federal and state) made by UMD employees in 2021 + 2022
+
+all_combined_2021_2022 <- rbind(combined_salary_fec_2022, combined_salary_fec_2021, combined_salary_state_2022, combined_salary_state_2021)
+
+```
+
+Analysis of 2021-2022 data, state and federal donations:
+
+
+```{r}
+
+all_combined_2021_2022 %>% 
+  count(party) %>% 
+  arrange(desc(n))
+
+#DEM	7070			
+#REP	55			
+# OTHER	4	
+
+party_breakdown_2021_2022 <- all_combined_2021_2022%>%  
+  group_by(party) %>% 
+  summarise(sum_party = sum(contribution_receipt_amount)) %>% 
+  arrange(desc(sum_party))
+
+#DEM 282164.91
+
+#REP 7003.26
+
+# OTHER 1600.00
+
+write_xlsx(party_breakdown_2021_2022, "party_breakdown_2021_2022.xlsx")
+
+
+
+
+
+#this is to get the count of contributions by party affiliation
+
+all_combined_2021_2022 %>% 
+  count(party)
+
+
+```
+
+Analysis of 2021-2022 data, state:
+
+
+```{r}
+
+
+state__party_breakdown_2021_2022 <- rbind(combined_salary_state_2021, combined_salary_state_2022) %>% 
+  group_by(party) %>% 
+  summarise(sum_party = sum(contribution_receipt_amount)) %>% 
+  arrange(desc(sum_party))
+
+# DEM 27161.41
+
+#REP 327.12
+
+```
+
+This next chunk of cleaning is to align FEC and state data from 2013-2020 (already did 21 + 22 above) with salary guides from those years.
+
+
+```{r}
+
+#2020 cleaning and joining:
+
+combined_salary_fec_2020 <- fec_data_all_years %>% 
+  inner_join(salary_guide_2020, by = c("first_name", "last_name")) %>% 
+  filter(report_year == 2020) %>% 
+    select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+combined_salary_state_2020 <- state_2020 %>% 
+  inner_join(salary_guide_2020, by = c("first_name", "last_name")) %>% 
+    select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+final_2020_data <- rbind(combined_salary_state_2020, combined_salary_fec_2020)
+
+#2019 cleaning and joining:
+
+combined_salary_fec_2019 <- fec_data_all_years %>% 
+  inner_join(salary_guide_2019, by = c("first_name", "last_name")) %>% 
+  filter(report_year == 2019) %>% 
+    select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+combined_salary_state_2019 <- state_2019 %>% 
+  inner_join(salary_guide_2019, by = c("first_name", "last_name")) %>% 
+    select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+final_2019_data <- rbind(combined_salary_state_2019, combined_salary_fec_2019)
+
+
+#2018 cleaning and joining:
+
+combined_salary_fec_2018 <- fec_data_all_years %>% 
+  inner_join(salary_guide_2018, by = c("first_name", "last_name")) %>% 
+  filter(report_year == 2018) %>% 
+    select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+combined_salary_state_2018 <- state_2018 %>% 
+  inner_join(salary_guide_2018, by = c("first_name", "last_name")) %>% 
+    select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+final_2018_data <- rbind(combined_salary_state_2018, combined_salary_fec_2018)
+
+
+#2017 cleaning and joining:
+
+combined_salary_fec_2017 <- fec_data_all_years %>% 
+  inner_join(salary_guide_2017, by = c("first_name", "last_name")) %>% 
+  filter(report_year == 2017) %>% 
+    select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+combined_salary_state_2017 <- state_2017 %>% 
+  inner_join(salary_guide_2017, by = c("first_name", "last_name")) %>% 
+    select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+final_2017_data <- rbind(combined_salary_state_2017, combined_salary_fec_2017)
+
+#2016 cleaning and joining:
+
+combined_salary_fec_2016 <- fec_data_all_years %>% 
+  inner_join(salary_guide_2016, by = c("first_name", "last_name")) %>% 
+  filter(report_year == 2016) %>% 
+    select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+combined_salary_state_2016 <- state_2016 %>% 
+  inner_join(salary_guide_2016, by = c("first_name", "last_name")) %>% 
+    select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+final_2016_data <- rbind(combined_salary_state_2016, combined_salary_fec_2016)
+
+
+#2015 cleaning and joining:
+
+combined_salary_fec_2015 <- fec_data_all_years %>% 
+  inner_join(salary_guide_2015, by = c("first_name", "last_name")) %>% 
+  filter(report_year == 2015) %>% 
+    select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+combined_salary_state_2015 <- state_2015 %>% 
+  inner_join(salary_guide_2015, by = c("first_name", "last_name")) %>% 
+    select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+final_2015_data <- rbind(combined_salary_state_2015, combined_salary_fec_2015)
+
+
+#2014 cleaning and joining:
+
+combined_salary_fec_2014 <- fec_data_all_years %>% 
+  inner_join(salary_guide_2014, by = c("first_name", "last_name")) %>% 
+  filter(report_year == 2014) %>% 
+    select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+combined_salary_state_2014 <- state_2014 %>% 
+  inner_join(salary_guide_2014, by = c("first_name", "last_name")) %>% 
+    select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+final_2014_data <- rbind(combined_salary_fec_2014, combined_salary_state_2014)
+
+#2013 cleaning and joining:
+
+
+combined_salary_fec_2013 <- fec_data_all_years %>% 
+  inner_join(salary_guide_2013, by = c("first_name", "last_name")) %>% 
+  filter(report_year == 2013) %>% 
+    select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+combined_salary_state_2013 <- state_2013 %>% 
+  inner_join(salary_guide_2013, by = c("first_name", "last_name")) %>% 
+    select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+final_2013_data <- rbind(combined_salary_state_2013, combined_salary_fec_2013)
+
+
+
+```
+Reformatting Dates for Graphs
+
+```{r}
+
+final_2021_2022 <- all_combined_2021_2022 %>% 
+  select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
+
+final_2013_2022_data <- rbind(final_2013_data, final_2014_data, final_2015_data, final_2016_data, final_2017_data, final_2018_data, final_2019_data, final_2020_data, final_2021_2022)
+
+
+final_2013_2022_data$date <- sapply(strsplit(as.character(final_2013_2022_data$date), " "), "[", 1)
+final_2013_2022_data$time <- sapply(strsplit(as.character(final_2013_2022_data$date), " "), "[", 2)
+
+final_2013_2022_data$month_year <- lubridate::mdy(final_2013_2022_data$date)
+final_2013_2022_data$month_year <- format((final_2013_2022_data$month_year), "%Y-%m-1")
+
+final_donations_by_month <- final_2013_2022_data %>% 
+  select(contribution_receipt_amount, month_year) %>% 
+  group_by(month_year) %>% 
+  summarise(sum_month = sum(contribution_receipt_amount))
+
+final_donations_by_month <- final_donations_by_month %>% 
+  mutate(month_year = as.Date(month_year))
+
+final_donations_by_month <- final_donations_by_month %>% 
+  dplyr::mutate(year = lubridate::year(month_year), 
+                month = lubridate::month(month_year), 
+                day = lubridate::day(month_year)) %>% 
+  select(sum_month, month_year, month, year)
+
+mymonths <- c("Jan","Feb","Mar",
+              "Apr","May","Jun",
+              "Jul","Aug","Sep",
+              "Oct","Nov","Dec")
+
+final_donations_by_month$MonthAbb <- mymonths[ final_donations_by_month$month ]
+
+write_xlsx(final_donations_by_month, "final_monthly_data.xlsx")
+
+
+
+
+```
+
+Merging First and Last Names:
+
+```{r}
+
+final_2013_2022_data$name <- paste(final_2013_2022_data$first_name, final_2013_2022_data$last_name)
+
+final_2021_2022$name <- paste(final_2021_2022$first_name, final_2021_2022$last_name)
+
+```
+
+
+By Year:
+
+```{r}
+
+final_2013_2022_data <- final_2013_2022_data %>% 
+  separate(date, sep="/", into = c("month", "day", "year"))
+
+
+#sum of donations by year:
+donations_sum_by_year <- final_2013_2022_data %>% 
+  group_by(year) %>% 
+  summarise(sum_year = sum(contribution_receipt_amount)) %>% 
+  arrange(desc(sum_year))
+
+#number of donations by year:
+
+donations_count_by_year <- final_2013_2022_data %>% 
+  group_by(year) %>% 
+  count(year) %>% 
+  arrange(desc(n))
+
+
+```
+
+
+By Department/School
+
+```{r}
+
+all_combined_department<- final_2013_2022_data %>% 
+  group_by(department) %>% 
+  summarise(sum_department = sum(contribution_receipt_amount)) %>% 
+  arrange(desc(sum_department))
+
+republican_department <- all_combined_2021_2022 %>% 
+  filter(party == "REP") %>% 
+  group_by(department) %>% 
+  summarise(sum_department = sum(contribution_receipt_amount)) %>% 
+  arrange(desc(sum_department))
+
+top_schools_2013_2022 <- final_2013_2022_data %>%
+  mutate(
+  division = gsub("\n", " ", division)
+  ) %>% 
+  group_by(division) %>% 
+  count(division) %>% 
+  arrange(desc(n))
+
+write_xlsx(top_schools_2013_2022, "/fec_data_eric/graph_spreadsheets/top_schools_2013_2022.xlsx")
+
+
+
+top_schools <- top_schools
+  
+top_schools$division <- tolower(top_schools$division)
+
+donations_count_by_school <- top_schools %>% 
+  group_by(division) %>% 
+  arrange(desc(n))
+
+
+
+
+```
+
+By Person
+
+```{r}
+
+top_people <- final_2021_2022 %>% 
+  group_by(name) %>% 
+  summarise(sum_people = sum(contribution_receipt_amount)) %>% 
+  arrange(desc(sum_people))
+
+
+
+```
+
+By Committee/Campaign in 2021-22 and in total:
+
+```{r}
+
+all_recipients_2021_2022 <- final_2021_2022 %>% 
+   group_by(committee_name) %>% 
+  summarise(sum_recipient = sum(contribution_receipt_amount)) %>% 
+  arrange(desc(sum_recipient)) 
+
+top_recipients_2021_2022 <- final_2021_2022 %>% 
+  group_by(committee_name) %>% 
+  summarise(sum_recipient = sum(contribution_receipt_amount)) %>% 
+  arrange(desc(sum_recipient))  %>% 
+  slice_max(sum_recipient, n =20)
+
+write_xlsx(top_recipients_2021_2022, "/fec_data_eric/graph_spreadsheets/top_recipients_2021_2022.xlsx")
+
+top_recipients_2013_2022 <- final_2013_2022_data %>% 
+  group_by(committee_name) %>% 
+  summarise(sum_recipient = sum(contribution_receipt_amount)) %>% 
+  arrange(desc(sum_recipient))
+
+```
+
+Trump/Biden:
+
+```{r}
+
+trump_biden_hillary <- final_2013_2022_data %>% 
+  filter(str_detect(committee_name, "TRUMP") | str_detect(committee_name, "BIDEN") | str_detect(committee_name, "HILLARY") | str_detect(committee_name, "SAVE AMERICA")) %>% 
+  mutate(candidate = case_when(
+    committee_name == "BIDEN FOR PRESIDENT" |
+    committee_name == "BIDEN VICTORY FUND" |
+    committee_name == "BIDEN FIGHT FUND"  ~ "BIDEN",
+    committee_name == "HILLARY VICTORY FUND" |
+    committee_name == "HILLARY FOR AMERICA" ~ "HILLARY",
+    committee_name == "DONALD J. TRUMP FOR PRESIDENT, INC." |
+    committee_name == "TRUMP MAKE AMERICA GREAT AGAIN COMMITTEE" |
+    committee_name == "SAVE AMERICA" ~ "TRUMP")) %>% 
+  group_by(candidate) %>% 
+  summarise(sum_candidate = sum(contribution_receipt_amount)) %>% 
+  arrange(desc(sum_candidate))
+```
