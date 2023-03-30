@@ -968,17 +968,7 @@ top_schools_2013_2022 <- final_2013_2022_data %>%
   count(division) %>% 
   arrange(desc(n))
 
-write_xlsx(top_schools_2013_2022, "/fec_data_eric/graph_spreadsheets/top_schools_2013_2022.xlsx")
-
-
-
-top_schools <- top_schools
-  
-top_schools$division <- tolower(top_schools$division)
-
-donations_count_by_school <- top_schools %>% 
-  group_by(division) %>% 
-  arrange(desc(n))
+write_xlsx(top_schools_2013_2022, "top_schools_2013_2022.xlsx")
 
 
 
@@ -1013,7 +1003,7 @@ top_recipients_2021_2022 <- final_2021_2022 %>%
   arrange(desc(sum_recipient))  %>% 
   slice_max(sum_recipient, n =20)
 
-write_xlsx(top_recipients_2021_2022, "/fec_data_eric/graph_spreadsheets/top_recipients_2021_2022.xlsx")
+write_xlsx(top_recipients_2021_2022, "top_recipients_2021_2022.xlsx")
 
 top_recipients_2013_2022 <- final_2013_2022_data %>% 
   group_by(committee_name) %>% 
