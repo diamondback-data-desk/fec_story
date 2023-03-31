@@ -69,15 +69,18 @@ State Data:
 
 #below, I imported datasets that had a filing year of 2013 - 2022, which is the frame of reference for this story. the data came from https://campaignfinance.maryland.gov/Public/ViewReceipts?theme=vista and I filtered to include individual donations for electoral races.
 
-state_2022 <- read.csv("../Data/state_2022.csv")
+state_2022 <- read.csv(unzip("../Data/state_2022.csv.zip", "state_2022.csv")) %>%
+  as.data.frame()
 state_2021 <- read.csv("../Data/state_2021.csv")
 state_2020 <- read.csv("../Data/state_2020.csv")
 state_2019 <- read.csv("../Data/state_2019.csv")
-state_2018 <- read.csv("../Data/state_2018.csv")
+state_2018 <- read.csv(unzip("../Data/state_2018.csv.zip", "state_2018.csv")) %>%
+  as.data.frame()
 state_2017 <- read.csv("../Data/state_2017.csv")
 state_2016 <- read.csv("../Data/state_2016.csv")
 state_2015 <- read.csv("../Data/state_2015.csv")
-state_2014 <- read.csv("../Data/state_2014.csv")
+state_2014 <- read.csv(unzip("../Data/state_2014.csv.zip", "state_2014.csv")) %>%
+  as.data.frame()
 state_2013 <- read.csv("../Data/state_2013.csv")
 
 
@@ -711,6 +714,13 @@ party_breakdown_2021_2022 <- all_combined_2021_2022%>%
   summarise(sum_party = sum(contribution_receipt_amount)) %>% 
   arrange(desc(sum_party))
 
+#DM checking above
+party_breakdown_num_donations <- all_combined_2021_2022 %>% 
+  group_by(party) %>% 
+  summarise(
+    count_donations = n()
+  )
+
 #DEM 282164.91
 
 #REP 7003.26
@@ -720,7 +730,12 @@ party_breakdown_2021_2022 <- all_combined_2021_2022%>%
 write_xlsx(party_breakdown_2021_2022, "party_breakdown_2021_2022.xlsx")
 
 
-
+#DM checking gregory ball
+gregory_ball_sum <- final_2021_2022 %>% 
+  filter(name == "gregory ball") %>% 
+  summarise(
+    sum_donations = sum(contribution_receipt_amount)
+  )
 
 
 #this is to get the count of contributions by party affiliation
@@ -874,12 +889,25 @@ final_2021_2022 <- all_combined_2021_2022 %>%
 
 final_2013_2022_data <- rbind(final_2013_data, final_2014_data, final_2015_data, final_2016_data, final_2017_data, final_2018_data, final_2019_data, final_2020_data, final_2021_2022)
 
-
 final_2013_2022_data$date <- sapply(strsplit(as.character(final_2013_2022_data$date), " "), "[", 1)
 final_2013_2022_data$time <- sapply(strsplit(as.character(final_2013_2022_data$date), " "), "[", 2)
 
 final_2013_2022_data$month_year <- lubridate::mdy(final_2013_2022_data$date)
 final_2013_2022_data$month_year <- format((final_2013_2022_data$month_year), "%Y-%m-1")
+
+#DM looking for dupliate rows in final_2013_2022_data - losing 7000 rows uh oh
+dupes_final_2013_2022_data <- final_2013_2022_data %>% 
+  group_by_all() %>% 
+  count()
+
+#Dm checking the number of act blue and win red donations
+act_blue_win_red_donations <- final_2013_2022_data %>% 
+  filter(committee_name == "ACTBLUE" | committee_name == "WINRED") %>% 
+  group_by(committee_name) %>% 
+  summarise(
+    sum_donations = sum(contribution_receipt_amount)
+  )
+
 
 final_donations_by_month <- final_2013_2022_data %>% 
   select(contribution_receipt_amount, month_year) %>% 
@@ -960,6 +988,12 @@ republican_department <- all_combined_2021_2022 %>%
   summarise(sum_department = sum(contribution_receipt_amount)) %>% 
   arrange(desc(sum_department))
 
+#DM checking sum of departments donations to republican candidates/groups
+republican_department_sum <- republican_department %>% 
+  summarise(
+    sum_donations = sum(sum_department)
+  )
+
 top_schools_2013_2022 <- final_2013_2022_data %>%
   mutate(
   division = gsub("\n", " ", division)
@@ -979,10 +1013,11 @@ By Person
 
 ```{r}
 
-top_people <- final_2021_2022 %>% 
+top_people <- final_2013_2022_data %>% 
   group_by(name) %>% 
   summarise(sum_people = sum(contribution_receipt_amount)) %>% 
   arrange(desc(sum_people))
+
 
 
 
