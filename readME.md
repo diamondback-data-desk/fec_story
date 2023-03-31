@@ -1,7 +1,6 @@
+## Data Cleaning:
 ### By Eric Neugeboren
 ### For The Diamondback
-
-## Data Cleaning:
 
 The Diamondback obtained political donations data from the Federal Elections Commission and the Maryland Campaign Reporting Information System. These databases track individual political donations to federal, state and local campaigns and committees.
 
