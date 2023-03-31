@@ -1,6 +1,6 @@
 # Almost all UMD employee political donations go to Democrats
-#### By Eric Neugeboren
-#### The Diamondback
+### By Eric Neugeboren
+### The Diamondback
 
 ## Data Cleaning:
 
