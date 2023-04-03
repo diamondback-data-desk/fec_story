@@ -101,6 +101,12 @@ state_2013_2022 <- rbind(state_2013, state_2014, state_2015, state_2016, state_2
   rename(committee_name = receiving_committee) %>% 
   rename(contribution_receipt_amount = contribution_amount) #i renamed these columns so they would align with the FEC data
 
+
+#DM checking above for duplicate rows
+dupes_state_2013_2022 <- state_2013_2022 %>% 
+  group_by_all() %>% 
+  count()
+
 #this will reformat the names of the employees for the state data so that I could join with the salary guides:
 
 state_2013_2022[c('last_name', 'first_name')] <- str_split_fixed(state_2013_2022$contributor_name, '  ', 2)
@@ -913,7 +919,10 @@ final_2013_2022_data$month_year <- format((final_2013_2022_data$month_year), "%Y
 #DM looking for dupliate rows in final_2013_2022_data - losing 7000 rows uh oh
 dupes_final_2013_2022_data <- final_2013_2022_data %>% 
   group_by_all() %>% 
-  count()
+  count() %>% 
+  relocate(
+    n, .after = contribution_receipt_amount
+  )
 
 #Dm checking the number of act blue and win red donations
 act_blue_win_red_donations <- final_2013_2022_data %>% 
