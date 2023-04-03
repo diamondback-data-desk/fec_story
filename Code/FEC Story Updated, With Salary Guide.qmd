@@ -14,8 +14,16 @@ library(data.table)
 library(lubridate)
 
 
-fec_data_all_years <- read.csv("../Data/FEC_Data_All_Years.csv") %>% 
-  rename(date = contribution_receipt_date)
+fec_data_all_years <- read_csv("../Data/all_fec_data.csv") %>% 
+  rename(committee_other = 9) %>%
+  rename(date = contribution_receipt_date) %>% 
+  rename(committee_name = committee_name...2) %>% 
+  filter(report_year >= 2013) %>% 
+  group_by_all() %>% 
+  distinct()
+
+all_fec_data <- fec_data_all_years %>% 
+  ungroup()
 
 salary_guide_2022 <- read.csv("../Data/salary_guide.csv") %>% 
   clean_names() %>% 
@@ -102,6 +110,11 @@ state_2013_2022[c('first_name', 'extra_name')] <- str_split_fixed(state_2013_202
 state_2013_2022$first_name <- tolower(state_2013_2022$first_name)
 
 state_2013_2022$last_name <- tolower(state_2013_2022$last_name)
+
+state_2013_2022 <- state_2013_2022 %>% 
+  mutate(transaction_id = NA) %>% 
+  mutate(committee_id = NA) %>% 
+  mutate(report_year = year)
   
 
 #now that we have separated the date column into three years, I am now going to create individual datasets for each year from 2013 to 2022. Note that this is different than the above datasets because that was for the filing year, while this was the year when the contribution was made. for example, a contribution could have been made in 2012 for a 2014 election cycle. we are interested in time of contribution.
@@ -134,7 +147,7 @@ The next three chunks of data are for coding the recipient of the political dona
 Party Affiliation for FEC Data
 
 ```{r}
-fec_data_all_years <- fec_data_all_years %>% 
+all_fec_data <- all_fec_data %>% 
   mutate(party = case_when(
         committee_name == "ACTBLUE" | 
         committee_name == "DSCC" |
@@ -527,13 +540,13 @@ Reformatting Data for Joining
 
 #this reformatted the names of the employees for the FEC data so that I could join with the salary guides
 
-fec_data_all_years[c('last_name', 'first_name', 'extra_name')] <- str_split_fixed(fec_data_all_years$contributor_name, ' ', 3)
+all_fec_data[c('last_name', 'first_name', 'extra_name')] <- str_split_fixed(all_fec_data$contributor_name, ' ', 3)
 
-fec_data_all_years$first_name <- tolower(fec_data_all_years$first_name)
+all_fec_data$first_name <- tolower(all_fec_data$first_name)
 
-fec_data_all_years$last_name <- tolower(fec_data_all_years$last_name)
+all_fec_data$last_name <- tolower(all_fec_data$last_name)
 
-fec_data_all_years <- fec_data_all_years %>% 
+all_fec_data <- all_fec_data %>% 
   mutate(last_name = str_replace(last_name, ",", ""))
 
 
@@ -662,10 +675,10 @@ Joining Data, 2021-2022
 
 #combining 2021 FEC data with 2021 salary guide:
 
-combined_salary_fec_2021 <- fec_data_all_years %>% 
+combined_salary_fec_2021 <- all_fec_data %>% 
   inner_join(salary_guide_2021, by = c("first_name", "last_name")) %>% 
   filter(report_year == 2021) %>% 
-  select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date, party)
+  select(first_name, last_name, contribution_receipt_amount, committee_name, department, division, salary, date, party)
 
 
 #combining 2021 state data with 2021 salary guide:
@@ -677,7 +690,7 @@ combined_salary_state_2021 <- state_2021 %>%
 #combining 2022 FEC data with 2022 salary guide:
 
 
-combined_salary_fec_2022 <- fec_data_all_years %>% 
+combined_salary_fec_2022 <- all_fec_data %>% 
   inner_join(salary_guide_2022, by = c("first_name", "last_name")) %>% 
   filter(report_year == 2022) %>% 
   select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date, party)
@@ -694,6 +707,7 @@ combined_salary_state_2022 <- state_2022 %>%
 
 all_combined_2021_2022 <- rbind(combined_salary_fec_2022, combined_salary_fec_2021, combined_salary_state_2022, combined_salary_state_2021)
 
+
 ```
 
 Analysis of 2021-2022 data, state and federal donations:
@@ -705,7 +719,7 @@ all_combined_2021_2022 %>%
   count(party) %>% 
   arrange(desc(n))
 
-#DEM	7070			
+#DEM	7180			
 #REP	55			
 # OTHER	4	
 
@@ -729,13 +743,14 @@ party_breakdown_num_donations <- all_combined_2021_2022 %>%
 
 write_xlsx(party_breakdown_2021_2022, "party_breakdown_2021_2022.xlsx")
 
+```
+<<<<<<< Updated upstream
 
-#DM checking gregory ball
-gregory_ball_sum <- final_2021_2022 %>% 
-  filter(name == "gregory ball") %>% 
-  summarise(
-    sum_donations = sum(contribution_receipt_amount)
-  )
+```{r}
+
+
+all_fec_data %>% 
+  filter(party == "DEM")
 
 
 #this is to get the count of contributions by party affiliation
@@ -770,7 +785,7 @@ This next chunk of cleaning is to align FEC and state data from 2013-2020 (alrea
 
 #2020 cleaning and joining:
 
-combined_salary_fec_2020 <- fec_data_all_years %>% 
+combined_salary_fec_2020 <- all_fec_data %>% 
   inner_join(salary_guide_2020, by = c("first_name", "last_name")) %>% 
   filter(report_year == 2020) %>% 
     select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
@@ -783,7 +798,7 @@ final_2020_data <- rbind(combined_salary_state_2020, combined_salary_fec_2020)
 
 #2019 cleaning and joining:
 
-combined_salary_fec_2019 <- fec_data_all_years %>% 
+combined_salary_fec_2019 <- all_fec_data %>% 
   inner_join(salary_guide_2019, by = c("first_name", "last_name")) %>% 
   filter(report_year == 2019) %>% 
     select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
@@ -797,7 +812,7 @@ final_2019_data <- rbind(combined_salary_state_2019, combined_salary_fec_2019)
 
 #2018 cleaning and joining:
 
-combined_salary_fec_2018 <- fec_data_all_years %>% 
+combined_salary_fec_2018 <- all_fec_data %>% 
   inner_join(salary_guide_2018, by = c("first_name", "last_name")) %>% 
   filter(report_year == 2018) %>% 
     select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
@@ -811,7 +826,7 @@ final_2018_data <- rbind(combined_salary_state_2018, combined_salary_fec_2018)
 
 #2017 cleaning and joining:
 
-combined_salary_fec_2017 <- fec_data_all_years %>% 
+combined_salary_fec_2017 <- all_fec_data %>% 
   inner_join(salary_guide_2017, by = c("first_name", "last_name")) %>% 
   filter(report_year == 2017) %>% 
     select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
@@ -824,7 +839,7 @@ final_2017_data <- rbind(combined_salary_state_2017, combined_salary_fec_2017)
 
 #2016 cleaning and joining:
 
-combined_salary_fec_2016 <- fec_data_all_years %>% 
+combined_salary_fec_2016 <- all_fec_data %>% 
   inner_join(salary_guide_2016, by = c("first_name", "last_name")) %>% 
   filter(report_year == 2016) %>% 
     select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
@@ -838,7 +853,7 @@ final_2016_data <- rbind(combined_salary_state_2016, combined_salary_fec_2016)
 
 #2015 cleaning and joining:
 
-combined_salary_fec_2015 <- fec_data_all_years %>% 
+combined_salary_fec_2015 <- all_fec_data %>% 
   inner_join(salary_guide_2015, by = c("first_name", "last_name")) %>% 
   filter(report_year == 2015) %>% 
     select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
@@ -852,7 +867,7 @@ final_2015_data <- rbind(combined_salary_state_2015, combined_salary_fec_2015)
 
 #2014 cleaning and joining:
 
-combined_salary_fec_2014 <- fec_data_all_years %>% 
+combined_salary_fec_2014 <- all_fec_data %>% 
   inner_join(salary_guide_2014, by = c("first_name", "last_name")) %>% 
   filter(report_year == 2014) %>% 
     select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
@@ -866,7 +881,7 @@ final_2014_data <- rbind(combined_salary_fec_2014, combined_salary_state_2014)
 #2013 cleaning and joining:
 
 
-combined_salary_fec_2013 <- fec_data_all_years %>% 
+combined_salary_fec_2013 <- all_fec_data %>% 
   inner_join(salary_guide_2013, by = c("first_name", "last_name")) %>% 
   filter(report_year == 2013) %>% 
     select(first_name, last_name, contribution_receipt_amount,committee_name, department, division, salary, date)
@@ -930,7 +945,7 @@ mymonths <- c("Jan","Feb","Mar",
 
 final_donations_by_month$MonthAbb <- mymonths[ final_donations_by_month$month ]
 
-write_xlsx(final_donations_by_month, "final_monthly_data.xlsx")
+write_xlsx(final_donations_by_month, "../Data/monthly_data.xls")
 
 
 
@@ -1044,6 +1059,7 @@ top_recipients_2013_2022 <- final_2013_2022_data %>%
   group_by(committee_name) %>% 
   summarise(sum_recipient = sum(contribution_receipt_amount)) %>% 
   arrange(desc(sum_recipient))
+
 
 ```
 
