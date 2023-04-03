@@ -25,45 +25,45 @@ fec_data_all_years <- read_csv("../Data/all_fec_data.csv") %>%
 all_fec_data <- fec_data_all_years %>% 
   ungroup()
 
-salary_guide_2022 <- read.csv("../Data/salary_guide.csv") %>% 
+salary_guide_2022 <- readcsv("../Data/salary_guide.csv") %>% 
   clean_names() %>% 
   filter(!str_detect(department, 'Shady Grove')) %>% 
   rename(salary = appt_base_annual_salary)
 
-salary_guide_2021 <- read.csv("../Data/salaries_2021.csv") %>% 
+salary_guide_2021 <- read_csv("../Data/salaries_2021.csv") %>% 
   clean_names() %>% 
   filter(!str_detect(department, 'Shady Grove')) %>% 
   rename(salary = appt_base_annual_salary)
 
-salary_guide_2020 <- read.csv("../Data/salary_data_2020.csv") %>% 
+salary_guide_2020 <- read_csv("../Data/salary_data_2020.csv") %>% 
   clean_names() %>% 
   filter(!str_detect(department, 'Shady Grove'))
 
-salary_guide_2019 <- read.csv("../Data/salary_data_2019.csv") %>% 
+salary_guide_2019 <- read_csv("../Data/salary_data_2019.csv") %>% 
   clean_names() %>% 
   filter(!str_detect(department, 'Shady Grove'))
 
-salary_guide_2018 <- read.csv("../Data/salary_data_2018.csv") %>% 
+salary_guide_2018 <- read_csv("../Data/salary_data_2018.csv") %>% 
   clean_names() %>% 
   filter(!str_detect(department, 'Shady Grove'))
 
-salary_guide_2017 <- read.csv("../Data/salary_data_2017.csv") %>% 
+salary_guide_2017 <- read_csv("../Data/salary_data_2017.csv") %>% 
   clean_names() %>% 
   filter(!str_detect(department, 'Shady Grove'))
 
-salary_guide_2016 <- read.csv("../Data/salary_data_2016.csv") %>% 
+salary_guide_2016 <- read_csv("../Data/salary_data_2016.csv") %>% 
   clean_names() %>% 
   filter(!str_detect(department, 'Shady Grove'))
 
-salary_guide_2015 <- read.csv("../Data/salary_data_2015.csv") %>% 
+salary_guide_2015 <- read_csv("../Data/salary_data_2015.csv") %>% 
   clean_names() %>% 
   filter(!str_detect(department, 'Shady Grove'))
 
-salary_guide_2014 <- read.csv("../Data/salary_data_2014.csv") %>% 
+salary_guide_2014 <- read_csv("../Data/salary_data_2014.csv") %>% 
   clean_names() %>% 
   filter(!str_detect(department, 'Shady Grove'))
 
-salary_guide_2013 <- read.csv("../Data/salary_data_2013.csv") %>% 
+salary_guide_2013 <- read_csv("../Data/salary_data_2013.csv") %>% 
   clean_names() %>% 
   filter(!str_detect(department, 'Shady Grove'))
 
@@ -77,19 +77,19 @@ State Data:
 
 #below, I imported datasets that had a filing year of 2013 - 2022, which is the frame of reference for this story. the data came from https://campaignfinance.maryland.gov/Public/ViewReceipts?theme=vista and I filtered to include individual donations for electoral races.
 
-state_2022 <- read.csv(unzip("../Data/state_2022.csv.zip", "state_2022.csv")) %>%
+state_2022 <- read_csv(unzip("../Data/state_2022.csv.zip", "state_2022.csv")) %>%
   as.data.frame()
-state_2021 <- read.csv("../Data/state_2021.csv")
-state_2020 <- read.csv("../Data/state_2020.csv")
-state_2019 <- read.csv("../Data/state_2019.csv")
-state_2018 <- read.csv(unzip("../Data/state_2018.csv.zip", "state_2018.csv")) %>%
+state_2021 <- read_csv("../Data/state_2021.csv")
+state_2020 <- read_csv("../Data/state_2020.csv")
+state_2019 <- read_csv("../Data/state_2019.csv")
+state_2018 <- read_csv(unzip("../Data/state_2018.csv.zip", "state_2018.csv")) %>%
   as.data.frame()
-state_2017 <- read.csv("../Data/state_2017.csv")
-state_2016 <- read.csv("../Data/state_2016.csv")
-state_2015 <- read.csv("../Data/state_2015.csv")
-state_2014 <- read.csv(unzip("../Data/state_2014.csv.zip", "state_2014.csv")) %>%
+state_2017 <- read_csv("../Data/state_2017.csv")
+state_2016 <- read_csv("../Data/state_2016.csv")
+state_2015 <- read_csv("../Data/state_2015.csv")
+state_2014 <- read_csv(unzip("../Data/state_2014.csv.zip", "state_2014.csv")) %>%
   as.data.frame()
-state_2013 <- read.csv("../Data/state_2013.csv")
+state_2013 <- read_csv("../Data/state_2013.csv")
 
 
 #this combined the data into one dataset and filtered the data for people who work UMD
