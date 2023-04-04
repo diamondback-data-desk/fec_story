@@ -20,12 +20,12 @@ fec_data_all_years <- read_csv("../Data/all_fec_data.csv") %>%
   rename(committee_name = committee_name...2) %>% 
   filter(report_year >= 2013) %>% 
   group_by_all() %>% 
-  distinct()
+  distinct() %>% 
 
 all_fec_data <- fec_data_all_years %>% 
   ungroup()
 
-salary_guide_2022 <- readcsv("../Data/salary_guide.csv") %>% 
+salary_guide_2022 <- read_csv("../Data/salary_guide.csv") %>% 
   clean_names() %>% 
   filter(!str_detect(department, 'Shady Grove')) %>% 
   rename(salary = appt_base_annual_salary)
@@ -713,8 +713,21 @@ combined_salary_state_2022 <- state_2022 %>%
 
 all_combined_2021_2022 <- rbind(combined_salary_fec_2022, combined_salary_fec_2021, combined_salary_state_2022, combined_salary_state_2021)
 
+#DM checking "Almost all political donations from University of Maryland salaried employees in 2021 and 2022 went to Democrats"
+by_party_2021_2022 <- all_combined_2021_2022 %>% 
+  group_by(party) %>% 
+  summarise(
+    count = n(),
+    sum_donations = sum(contribution_receipt_amount)
+  ) %>% 
+  mutate(
+    total = nrow(all_combined_2021_2022),
+    percent = round((count/total)*100, 2)
+  )
 
-```
+
+
+
 
 Analysis of 2021-2022 data, state and federal donations:
 
